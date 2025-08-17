@@ -2,11 +2,11 @@
 # FP-Growth thuần Python cho dữ liệu FIMI (mỗi dòng 1 giao dịch, items cách nhau bởi khoảng trắng)
 # Chức năng: frequent itemsets, lọc maximal itemsets, sinh association rules (confidence, lift, leverage, conviction)
 
-import os
-import math
 import argparse
-from collections import defaultdict, Counter
-from itertools import combinations, chain
+import math
+import os
+from collections import Counter
+from itertools import combinations
 
 # =========================
 # 1) Đọc giao dịch (FIMI)
@@ -28,22 +28,25 @@ def load_transactions(path, limit=None):
             transactions.append(items)
     return transactions
 
+
 # =========================
 # 2) Cấu trúc FP-Tree
 # =========================
 class FPNode:
     __slots__ = ("item", "count", "parent", "children", "node_link")
+
     def __init__(self, item, parent):
         self.item = item
         self.count = 0
         self.parent = parent
-        self.children = {}       # item -> FPNode
-        self.node_link = None    # link tới node kế tiếp có cùng item (header table)
+        self.children = {}  # item -> FPNode
+        self.node_link = None  # link tới node kế tiếp có cùng item (header table)
+
 
 class FPTree:
     def __init__(self):
         self.root = FPNode(None, None)
-        self.header_table = {}   # item -> [support_count, first_node]
+        self.header_table = {}  # item -> [support_count, first_node]
 
     def add_transaction(self, items, count=1):
         """
@@ -77,6 +80,7 @@ class FPTree:
         Trả về danh sách item theo thứ tự tăng dần theo support trong cây hiện tại (dùng khi khai thác).
         """
         return sorted(self.header_table.keys(), key=lambda it: self.header_table[it][0])
+
 
 # =========================
 # 3) Xây FP-Tree ban đầu
@@ -120,6 +124,7 @@ def build_fptree(transactions, min_support_count):
 
     return tree, freq, n_tx
 
+
 # =========================
 # 4) Khai thác FP-Tree (đệ quy)
 # =========================
@@ -134,6 +139,7 @@ def ascend_prefix_path(node):
         current = current.parent
     path.reverse()
     return path
+
 
 def conditional_pattern_base(tree, base_item):
     """
@@ -150,6 +156,7 @@ def conditional_pattern_base(tree, base_item):
                 patterns.append((path, node.count))
         node = node.node_link
     return patterns
+
 
 def build_conditional_fptree(tree, base_item, min_support_count):
     """
@@ -186,6 +193,7 @@ def build_conditional_fptree(tree, base_item, min_support_count):
 
     return cond_tree
 
+
 def mine_tree(tree, prefix, min_support_count, freq_itemsets):
     """
     Khai thác cây hiện tại:
@@ -202,6 +210,7 @@ def mine_tree(tree, prefix, min_support_count, freq_itemsets):
         cond_tree = build_conditional_fptree(tree, item, min_support_count)
         if cond_tree is not None and cond_tree.header_table:
             mine_tree(cond_tree, list(new_itemset), min_support_count, freq_itemsets)
+
 
 def fpgrowth(transactions, min_support):
     """
@@ -233,6 +242,7 @@ def fpgrowth(transactions, min_support):
     mine_tree(tree, prefix=[], min_support_count=min_support_count, freq_itemsets=freq_itemsets)
     return freq_itemsets, n_tx
 
+
 # =========================
 # 5) Maximal itemsets
 # =========================
@@ -251,6 +261,7 @@ def maximal_itemsets(freq_itemsets):
             maximals_setlist.append(s)
     return maximals
 
+
 # =========================
 # 6) Association rules
 # =========================
@@ -259,6 +270,7 @@ def all_nonempty_proper_subsets(itemset):
     for r in range(1, len(items)):
         for A in combinations(items, r):
             yield frozenset(A)
+
 
 def association_rules(freq_itemsets, n_tx, min_conf=0.6):
     """
@@ -301,6 +313,7 @@ def association_rules(freq_itemsets, n_tx, min_conf=0.6):
     rules.sort(key=lambda r: (-r["confidence"], -r["lift"], -r["support"]))
     return rules
 
+
 # =========================
 # 7) Helper: Lưu CSV
 # =========================
@@ -310,7 +323,8 @@ def save_frequent_itemsets_csv(freq_itemsets, n_tx, path):
         w = csv.writer(f)
         w.writerow(["itemset", "length", "support_count", "support"])
         for iset, cnt in sorted(freq_itemsets.items(), key=lambda kv: (len(kv[0]), kv[0])):
-            w.writerow([" ".join(map(str, sorted(iset))), len(iset), cnt, cnt/n_tx])
+            w.writerow([" ".join(map(str, sorted(iset))), len(iset), cnt, cnt / n_tx])
+
 
 def save_maximal_itemsets_csv(maximals, n_tx, path):
     import csv
@@ -318,14 +332,15 @@ def save_maximal_itemsets_csv(maximals, n_tx, path):
         w = csv.writer(f)
         w.writerow(["itemset", "length", "support_count", "support"])
         for iset, cnt in sorted(maximals, key=lambda kv: (-len(kv[0]), kv[0])):
-            w.writerow([" ".join(map(str, sorted(iset))), len(iset), cnt, cnt/n_tx])
+            w.writerow([" ".join(map(str, sorted(iset))), len(iset), cnt, cnt / n_tx])
+
 
 def save_rules_csv(rules, path, top=None):
     import csv
     rows = rules if top is None else rules[:top]
     with open(path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["antecedent","consequent","support","confidence","lift","leverage","conviction"])
+        w.writerow(["antecedent", "consequent", "support", "confidence", "lift", "leverage", "conviction"])
         for r in rows:
             w.writerow([
                 " ".join(map(str, r["antecedent"])),
@@ -337,12 +352,13 @@ def save_rules_csv(rules, path, top=None):
                 f'{r["conviction"]:.6f}' if math.isfinite(r["conviction"]) else "inf",
             ])
 
+
 # =========================
 # 8) Main CLI
 # =========================
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=str, default="retail.dat",help="Đường dẫn file FIMI (retail.dat)")
+    parser.add_argument("--data", type=str, default="retail.dat", help="Đường dẫn file FIMI (retail.dat)")
     parser.add_argument("--min_support", type=float, default=0.02, help="Tối thiểu support (tỉ lệ, vd 0.02)")
     parser.add_argument("--min_conf", type=float, default=0.6, help="Tối thiểu confidence (vd 0.6)")
     parser.add_argument("--limit", type=int, default=None, help="Chỉ đọc N dòng đầu để test")
